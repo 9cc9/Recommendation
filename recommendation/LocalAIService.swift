@@ -1,8 +1,10 @@
 import Foundation
 
 class LocalAIService {
-    // Ollama API地址
-    private let apiURL = "http://121.48.164.125:11434/api/generate"
+    // 修改API地址
+    private let apiURL = "http://121.48.164.125/v1/chat-messages"
+    // 添加认证token
+    private let authToken = "Bearer app-PYdCdf9SgMb5twkshkDSvvkg"
     // 使用的模型名称
     private let modelName: String
     
@@ -38,22 +40,13 @@ class LocalAIService {
         // 添加用户消息到历史记录
         addMessageToHistory(role: "user", content: prompt)
         
-        // 创建消息数组，包含系统提示和历史记录
-        var messages: [[String: String]] = [
-            ["role": "system", "content": systemPrompt]
-        ]
-        
-        // 添加历史对话记录
-        messages.append(contentsOf: chatHistory.map { ["role": $0.role, "content": $0.content] })
-        
-        // 创建请求体
+        // 创建新的请求体格式
         let requestBody: [String: Any] = [
-            "model": modelName,
-            "prompt": buildPrompt(messages: messages),
-            "stream": true,
-            "options": [
-                "temperature": 0.7,
-            ]
+            "inputs": [:],
+            "query": prompt,
+            "response_mode": "streaming",
+            "conversation_id": "",
+            "user": "abc-123"
         ]
         
         // 创建URL
@@ -66,6 +59,7 @@ class LocalAIService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue(authToken, forHTTPHeaderField: "Authorization")
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody, options: [])
@@ -156,22 +150,27 @@ class LocalAIService {
             for line in lines {
                 guard !line.isEmpty else { continue }
                 
+                // 移除"data: "前缀
+                let jsonString = line.hasPrefix("data: ") ? String(line.dropFirst(6)) : line
+                
                 do {
                     let options: JSONSerialization.ReadingOptions = [.allowFragments]
-                    if let data = line.data(using: .utf8),
+                    if let data = jsonString.data(using: .utf8),
                        let json = try JSONSerialization.jsonObject(with: data, options: options) as? [String: Any],
-                       let response = json["response"] as? String {
+                       let event = json["event"] as? String,
+                       event == "agent_message",  // 确保是agent_message事件
+                       let answer = json["answer"] as? String {
                         
-                        self.fullResponse += response
+                        self.fullResponse += answer
                         
                         DispatchQueue.main.async {
-                            self.onReceive(response)
+                            self.onReceive(answer)
                         }
                     }
                 } catch {
                     print("解析流式数据出错: \(error)")
-                    if let data = line.data(using: .utf8) {
-                        print("原始数据: \(String(data: data, encoding: .utf8) ?? "无法解码")")
+                    if let data = jsonString.data(using: .utf8) {
+                        print("原始数据: \(jsonString)")
                     }
                 }
             }

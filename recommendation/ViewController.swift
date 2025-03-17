@@ -75,7 +75,7 @@ class ViewController: UIViewController {
         
         // 添加标题标签
         let titleLabel = UILabel()
-        titleLabel.text = "推荐菜"
+        titleLabel.text = "痛风患者专属AI"
         titleLabel.font = UIFont.systemFont(ofSize: 24, weight: .bold)
         titleLabel.textAlignment = .center
         titleLabel.textColor = .white // 白色文字
