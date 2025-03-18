@@ -32,8 +32,6 @@ class ViewController: UIViewController {
     private let pauseThreshold: TimeInterval = 2.0
     private var lastTranscription: String = ""
     
-    // 添加AI服务
-    private let aiService = AIService(apiKey: "sk-6267c004c2ac41d69c098628660f41d0")
 
     private let localAI = LocalAIService(modelName: "deepseek-r1:32b")
 
