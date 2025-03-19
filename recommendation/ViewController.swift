@@ -380,6 +380,18 @@ class ViewController: UIViewController {
                 // 使用文字转语音服务朗读新增内容
                 TextToSpeechService.shared.speakAddition(chunk)
             },
+            onLoading: { [weak self] isLoading in
+                // 暂时不需要显示加载状态
+                // guard let self = self else { return }
+                
+                // DispatchQueue.main.async {
+                //     // 根据加载状态更新UI
+                //     if isLoading {
+                //         // AI开始思考时显示的消息
+                //         self.addOrUpdateAIMessage("正在加载知识库...")
+                //     }
+                // }
+            },
             onComplete: { [weak self] fullResponse, error in
                 guard let self = self else { return }
                 

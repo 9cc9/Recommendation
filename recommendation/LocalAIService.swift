@@ -21,6 +21,7 @@ class LocalAIService {
     // 定义回调类型
     typealias CompletionHandler = (String?, Error?) -> Void
     typealias StreamHandler = (String) -> Void
+    typealias LoadingHandler = (Bool) -> Void
     
     // 初始化方法
     init(modelName: String) {
@@ -34,7 +35,10 @@ class LocalAIService {
     
     
     // 发送消息到AI并获取流式回复
-    func sendMessageStream(prompt: String, onReceive: @escaping StreamHandler, onComplete: @escaping CompletionHandler) {
+    func sendMessageStream(prompt: String, 
+                         onReceive: @escaping StreamHandler, 
+                         onLoading: @escaping LoadingHandler,
+                         onComplete: @escaping CompletionHandler) {
         print("开始流式请求，提示词: \(prompt)")
         
         // 添加用户消息到历史记录
@@ -71,13 +75,17 @@ class LocalAIService {
         }
         
         // 创建自定义的流式处理委托
-        let streamDelegate = StreamDelegate(onReceive: onReceive, onComplete: { content, error in
-            // 如果成功接收到完整回复，添加到历史记录
-            if let content = content, error == nil {
-                self.addMessageToHistory(role: "assistant", content: content)
+        let streamDelegate = StreamDelegate(
+            onReceive: onReceive,
+            onLoading: onLoading,
+            onComplete: { content, error in
+                // 如果成功接收到完整回复，添加到历史记录
+                if let content = content, error == nil {
+                    self.addMessageToHistory(role: "assistant", content: content)
+                }
+                onComplete(content, error)
             }
-            onComplete(content, error)
-        })
+        )
         
         // 创建会话并设置委托
         let session = URLSession(configuration: .default, delegate: streamDelegate, delegateQueue: .main)
@@ -109,13 +117,20 @@ class LocalAIService {
     private class StreamDelegate: NSObject, URLSessionDataDelegate {
         private let onReceive: (String) -> Void
         private let onComplete: (String?, Error?) -> Void
+        private let onLoading: (Bool) -> Void
         private var fullResponse = ""
         private var buffer = Data()
+        private var messageId: String?
+        private var conversationId: String?
+        private var lastPingTime: Date?
         
         var task: URLSessionDataTask?
         
-        init(onReceive: @escaping (String) -> Void, onComplete: @escaping (String?, Error?) -> Void) {
+        init(onReceive: @escaping (String) -> Void, 
+             onLoading: @escaping (Bool) -> Void,
+             onComplete: @escaping (String?, Error?) -> Void) {
             self.onReceive = onReceive
+            self.onLoading = onLoading
             self.onComplete = onComplete
             super.init()
         }
@@ -126,16 +141,15 @@ class LocalAIService {
         }
         
         func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-            if let error = error {
-                DispatchQueue.main.async {
-                    self.onComplete(nil, error)
-                }
-                return
-            }
-            
-            processBuffer(isComplete: true)
-            
             DispatchQueue.main.async {
+                self.onLoading(false)
+                
+                if let error = error {
+                    self.onComplete(nil, error)
+                    return
+                }
+                
+                self.processBuffer(isComplete: true)
                 self.onComplete(self.fullResponse, nil)
             }
         }
@@ -145,38 +159,111 @@ class LocalAIService {
                 return
             }
             
-            let lines = bufferString.components(separatedBy: "\n")
+            // 按照SSE格式分割数据流
+            let chunks = bufferString.components(separatedBy: "\n\n")
             
-            for line in lines {
-                guard !line.isEmpty else { continue }
+            for chunk in chunks {
+                guard !chunk.isEmpty else { continue }
+                
+                // 处理 ping 事件
+                if chunk.trimmingCharacters(in: .whitespaces) == "event: ping" {
+                    handlePingEvent()
+                    continue
+                }
                 
                 // 移除"data: "前缀
-                let jsonString = line.hasPrefix("data: ") ? String(line.dropFirst(6)) : line
+                guard chunk.hasPrefix("data: ") else { continue }
+                let jsonString = String(chunk.dropFirst(6))
                 
                 do {
-                    let options: JSONSerialization.ReadingOptions = [.allowFragments]
-                    if let data = jsonString.data(using: .utf8),
-                       let json = try JSONSerialization.jsonObject(with: data, options: options) as? [String: Any],
-                       let event = json["event"] as? String,
-                       event == "agent_message",  // 确保是agent_message事件
-                       let answer = json["answer"] as? String {
-                        
-                        self.fullResponse += answer
-                        
-                        DispatchQueue.main.async {
-                            self.onReceive(answer)
-                        }
+                    guard let data = jsonString.data(using: .utf8),
+                          let json = try JSONSerialization.jsonObject(with: data, options: [.allowFragments]) as? [String: Any],
+                          let event = json["event"] as? String else {
+                        continue
                     }
+                    
+                    // 处理不同类型的事件
+                    switch event {
+                    case "agent_message":
+                        if let answer = json["answer"] as? String {
+                            self.fullResponse += answer
+                            DispatchQueue.main.async {
+                                self.onReceive(answer)
+                            }
+                        }
+                    case "agent_thought":
+                        if let thought = json["thought"] as? String,
+                           !thought.isEmpty,
+                           let observation = json["observation"] as? String,
+                           let tool = json["tool"] as? String,
+                           let toolInput = json["tool_input"] as? String,
+                           let position = json["position"] as? Int {
+                            
+                            let thoughtProcess = """
+                            🤔 思考过程 #\(position)
+                            ----------------
+                            💭 思考: \(thought)
+                            🔧 使用工具: \(tool)
+                            📝 工具输入: \(toolInput)
+                            📋 观察结果: \(observation)
+                            """
+                            
+                            DispatchQueue.main.async {
+                                // 使用 > 来创建可折叠的引用块
+                                self.onReceive("\n\n<展开思考过程 #\(position)>\n\n>\(thoughtProcess.split(separator: "\n").joined(separator: "\n>"))\n\n")
+                            }
+                        }
+                    case "message_end":
+                        self.messageId = json["message_id"] as? String
+                        self.conversationId = json["conversation_id"] as? String
+                        
+                    case "error":
+                        if let errorMessage = json["message"] as? String {
+                            DispatchQueue.main.async {
+                                let error = NSError(domain: "LocalAIService",
+                                                  code: json["status"] as? Int ?? 500,
+                                                  userInfo: [NSLocalizedDescriptionKey: errorMessage])
+                                self.onComplete(nil, error)
+                            }
+                        }
+                        
+                    case "message_replace":
+                        if let answer = json["answer"] as? String {
+                            self.fullResponse = answer
+                            DispatchQueue.main.async {
+                                self.onReceive(answer)
+                            }
+                        }
+                        
+                    default:
+                        break
+                    }
+                    
                 } catch {
                     print("解析流式数据出错: \(error)")
-                    if let data = jsonString.data(using: .utf8) {
-                        print("原始数据: \(jsonString)")
-                    }
+                    print("原始数据: \(chunk)")
                 }
             }
             
             if !isComplete {
                 buffer = Data()
+            }
+        }
+        
+        private func handlePingEvent() {
+            let currentTime = Date()
+            lastPingTime = currentTime
+            
+            DispatchQueue.main.async {
+                self.onLoading(true)
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                    guard let self = self else { return }
+                    if let lastPing = self.lastPingTime,
+                       currentTime == lastPing {
+                        self.onLoading(false)
+                    }
+                }
             }
         }
     }
