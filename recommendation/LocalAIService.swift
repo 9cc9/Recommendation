@@ -21,6 +21,7 @@ class LocalAIService {
     // 定义回调类型
     typealias CompletionHandler = (String?, Error?) -> Void
     typealias StreamHandler = (String) -> Void
+    typealias ThinkingHandler = (String) -> Void
     typealias LoadingHandler = (Bool) -> Void
     
     // 初始化方法
@@ -37,6 +38,7 @@ class LocalAIService {
     // 发送消息到AI并获取流式回复
     func sendMessageStream(prompt: String, 
                          onReceive: @escaping StreamHandler, 
+                         onThinking: @escaping ThinkingHandler, 
                          onLoading: @escaping LoadingHandler,
                          onComplete: @escaping CompletionHandler) {
         print("开始流式请求，提示词: \(prompt)")
@@ -77,6 +79,7 @@ class LocalAIService {
         // 创建自定义的流式处理委托
         let streamDelegate = StreamDelegate(
             onReceive: onReceive,
+            onThinking: onThinking,
             onLoading: onLoading,
             onComplete: { content, error in
                 // 如果成功接收到完整回复，添加到历史记录
@@ -116,6 +119,7 @@ class LocalAIService {
     // StreamDelegate类实现
     private class StreamDelegate: NSObject, URLSessionDataDelegate {
         private let onReceive: (String) -> Void
+        private let onThinking: (String) -> Void
         private let onComplete: (String?, Error?) -> Void
         private let onLoading: (Bool) -> Void
         private var fullResponse = ""
@@ -127,9 +131,11 @@ class LocalAIService {
         var task: URLSessionDataTask?
         
         init(onReceive: @escaping (String) -> Void, 
+             onThinking: @escaping (String) -> Void, 
              onLoading: @escaping (Bool) -> Void,
              onComplete: @escaping (String?, Error?) -> Void) {
             self.onReceive = onReceive
+            self.onThinking = onThinking
             self.onLoading = onLoading
             self.onComplete = onComplete
             super.init()
@@ -210,7 +216,7 @@ class LocalAIService {
                             
                             DispatchQueue.main.async {
                                 // 使用 > 来创建可折叠的引用块
-                                self.onReceive("\n\n<展开思考过程 #\(position)>\n\n>\(thoughtProcess.split(separator: "\n").joined(separator: "\n>"))\n\n")
+                                self.onThinking("\n\n<展开思考过程 #\(position)>\n\n>\(thoughtProcess.split(separator: "\n").joined(separator: "\n>"))\n\n")
                             }
                         }
                     case "message_end":

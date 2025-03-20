@@ -16,7 +16,7 @@ class ViewController: UIViewController {
     
     // 聊天记录显示区域
     let chatTableView = UITableView()
-    var chatMessages: [(sender: String, message: String)] = []
+    var chatMessages: [ChatMessage] = []
     
     // 添加顶部背景视图作为属性
     let topBackgroundView = UIView()
@@ -349,7 +349,7 @@ class ViewController: UIViewController {
         // 检查是否需要唤起应用
         if let appLaunchResult = appLaunchService.checkAndLaunchApp(for: text) {
             // 如果成功识别并尝试启动应用
-            addOrUpdateAIMessage(appLaunchResult.responseMessage)
+            addOrUpdateAIMessage(appLaunchResult.responseMessage, messageType: .normal)
             
             // 如果成功启动应用，不需要继续发送到AI服务
             if appLaunchResult.appLaunched {
@@ -375,10 +375,18 @@ class ViewController: UIViewController {
                 print("📥 收到AI响应片段: \(chunk)")
                 
                 // 添加或更新AI消息
-                self.addOrUpdateAIMessage(chunk)
+                self.addOrUpdateAIMessage(chunk, messageType: .normal)
                 
                 // 使用文字转语音服务朗读新增内容
                 TextToSpeechService.shared.speakAddition(chunk)
+            },
+            onThinking: { [weak self] chunk in
+                guard let self = self else { return }
+                
+                print("🤔 AI思考过程: \(chunk)")
+                
+                // 添加或更新思考消息
+                self.addOrUpdateAIMessage(chunk, messageType: .thinking)
             },
             onLoading: { [weak self] isLoading in
                 // 暂时不需要显示加载状态
@@ -404,7 +412,7 @@ class ViewController: UIViewController {
                     self.showAlert(message: errorMessage)
                     
                     // 在聊天界面显示错误信息
-                    self.addOrUpdateAIMessage("抱歉，我现在无法回应，请检查AI服务是否正常运行。")
+                    self.addOrUpdateAIMessage("抱歉，我现在无法回应，请检查AI服务是否正常运行。", messageType: .normal)
                     return
                 }
                 
@@ -418,7 +426,13 @@ class ViewController: UIViewController {
     
     // 添加消息到聊天记录并返回索引
     private func addMessage(sender: String, message: String) -> Int {
-        chatMessages.append((sender: sender, message: message))
+        let chatMessage = ChatMessage(
+            sender: sender,
+            message: message,
+            type: .normal,
+            isExpanded: true
+        )
+        chatMessages.append(chatMessage)
         let indexPath = IndexPath(row: chatMessages.count - 1, section: 0)
         chatTableView.insertRows(at: [indexPath], with: .automatic)
         chatTableView.scrollToRow(at: indexPath, at: .bottom, animated: true)
@@ -430,14 +444,14 @@ class ViewController: UIViewController {
         let indexPath = IndexPath(row: index, section: 0)
         
         // 先更新数据源中的消息
-        let currentMessage = chatMessages[index].message
+        let currentMessage = chatMessages[index]
     
         
         // 更新表格视图
         chatTableView.beginUpdates()
         
         if let cell = chatTableView.cellForRow(at: indexPath) as? ChatBubbleCell {
-            cell.messageLabel.text = currentMessage
+            cell.messageLabel.text = currentMessage.message
             // 强制布局更新
             cell.setNeedsLayout()
             cell.layoutIfNeeded()
@@ -450,19 +464,28 @@ class ViewController: UIViewController {
     }
     
     // 添加或更新AI消息
-    private func addOrUpdateAIMessage(_ chunk: String) {
+    private func addOrUpdateAIMessage(_ chunk: String, messageType: MessageType) {
         DispatchQueue.main.async {
-            // 检查是否已经有AI消息
             if let lastMessageIndex = self.chatMessages.indices.last,
-               self.chatMessages[lastMessageIndex].sender == "ai" {
-                // 更新现有AI消息
-                self.chatMessages[lastMessageIndex].message += chunk
+               self.chatMessages[lastMessageIndex].sender == "ai" &&
+               self.chatMessages[lastMessageIndex].type == messageType {
+                // 更新现有消息
+                var updatedMessage = self.chatMessages[lastMessageIndex]
+                updatedMessage.message += chunk
+                self.chatMessages[lastMessageIndex] = updatedMessage
                 self.updateAIMessageCell(at: lastMessageIndex)
             } else {
-                // 添加新的AI消息
-                let index = self.addMessage(sender: "ai", message: chunk)
-                // 确保滚动到最新消息
+                // 添加新消息
+                let message = ChatMessage(
+                    sender: "ai",
+                    message: chunk,
+                    type: messageType,
+                    isExpanded: true
+                )
+                self.chatMessages.append(message)
+                let index = self.chatMessages.count - 1
                 let indexPath = IndexPath(row: index, section: 0)
+                self.chatTableView.insertRows(at: [indexPath], with: .automatic)
                 self.chatTableView.scrollToRow(at: indexPath, at: .bottom, animated: true)
             }
         }
@@ -480,6 +503,10 @@ class ChatBubbleCell: UITableViewCell {
             setupBubbleStyle()
         }
     }
+    
+    private let expandButton = UIButton()
+    private var isThinkingCell = false
+    var onExpandTapped: (() -> Void)?
     
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -514,6 +541,14 @@ class ChatBubbleCell: UITableViewCell {
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(messageLabel) // 直接添加到contentView而不是bubbleView
         
+        // 添加展开/折叠按钮
+        expandButton.setImage(UIImage(systemName: "chevron.down"), for: .normal)
+        expandButton.tintColor = .gray
+        expandButton.translatesAutoresizingMaskIntoConstraints = false
+        bubbleView.addSubview(expandButton)
+        
+        expandButton.addTarget(self, action: #selector(expandButtonTapped), for: .touchUpInside)
+        
         // 布局约束
         NSLayoutConstraint.activate([
             // 消息标签约束 - 相对于气泡视图定位
@@ -528,7 +563,12 @@ class ChatBubbleCell: UITableViewCell {
             
             avatarImageView.widthAnchor.constraint(equalToConstant: 36),
             avatarImageView.heightAnchor.constraint(equalToConstant: 36),
-            avatarImageView.centerYAnchor.constraint(equalTo: bubbleView.centerYAnchor)
+            avatarImageView.centerYAnchor.constraint(equalTo: bubbleView.centerYAnchor),
+            
+            expandButton.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 8),
+            expandButton.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -8),
+            expandButton.widthAnchor.constraint(equalToConstant: 20),
+            expandButton.heightAnchor.constraint(equalToConstant: 20)
         ])
     }
     
@@ -602,17 +642,59 @@ class ChatBubbleCell: UITableViewCell {
         avatarImageView.layer.cornerRadius = avatarImageView.frame.width / 2
     }
     
-    func configure(with message: String, isUser: Bool) {
-        // 打印调试信息
-        print("配置单元格: \(message), 用户消息: \(isUser)")
-        
-        messageLabel.text = message
+    @objc private func expandButtonTapped() {
+        onExpandTapped?()
+    }
+    
+    func configure(with message: ChatMessage, isUser: Bool) {
+        messageLabel.text = message.message
         isUserMessage = isUser
+        isThinkingCell = message.type == .thinking
+        
+        // 设置展开/折叠按钮状态
+        expandButton.isHidden = !isThinkingCell
+        let imageName = message.isExpanded ? "chevron.up" : "chevron.down"
+        expandButton.setImage(UIImage(systemName: imageName), for: .normal)
+        
+        // 设置思考消息的特殊样式
+        if isThinkingCell {
+            bubbleView.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 1.0, alpha: 1.0)
+            messageLabel.font = UIFont.italicSystemFont(ofSize: 16)
+            
+            // 根据展开状态调整约束
+            if message.isExpanded {
+                messageLabel.isHidden = false
+                // 恢复正常约束
+                NSLayoutConstraint.activate([
+                    messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10),
+                    messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10),
+                    messageLabel.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
+                    messageLabel.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14)
+                ])
+            } else {
+                messageLabel.isHidden = true
+                // 收起时将气泡高度设为最小值
+                bubbleView.heightAnchor.constraint(equalToConstant: 40).isActive = true
+            }
+        } else {
+            messageLabel.isHidden = false
+            bubbleView.backgroundColor = isUserMessage ? 
+                UIColor(red: 0.4, green: 0.7, blue: 0.9, alpha: 1.0) : 
+                UIColor(red: 0.95, green: 0.95, blue: 0.95, alpha: 1.0)
+            messageLabel.font = UIFont.systemFont(ofSize: 16)
+        }
     }
     
     override func prepareForReuse() {
         super.prepareForReuse()
         messageLabel.text = ""
+        
+        // 移除所有自定义约束
+        bubbleView.constraints.forEach { constraint in
+            if constraint.firstAttribute == .height {
+                bubbleView.removeConstraint(constraint)
+            }
+        }
     }
 }
 
@@ -625,7 +707,21 @@ extension ViewController: UITableViewDelegate, UITableViewDataSource {
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "ChatCell", for: indexPath) as! ChatBubbleCell
         let message = chatMessages[indexPath.row]
-        cell.configure(with: message.message, isUser: message.sender == "user")
+        
+        cell.configure(with: message, isUser: message.sender == "user")
+        
+        cell.onExpandTapped = { [weak self] in
+            guard let self = self else { return }
+            
+            // 切换展开状态
+            var updatedMessage = self.chatMessages[indexPath.row]
+            updatedMessage.isExpanded.toggle()
+            self.chatMessages[indexPath.row] = updatedMessage
+            
+            // 重新加载单元格
+            tableView.reloadRows(at: [indexPath], with: .automatic)
+        }
+        
         return cell
     }
     
@@ -648,4 +744,18 @@ extension ViewController: UITextFieldDelegate {
         }
         return false
     }
+}
+
+// 添加消息类型枚举
+enum MessageType {
+    case normal
+    case thinking
+}
+
+// 修改消息结构
+struct ChatMessage {
+    let sender: String
+    var message: String
+    let type: MessageType
+    var isExpanded: Bool
 }
