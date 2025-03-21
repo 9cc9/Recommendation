@@ -574,58 +574,51 @@ class ChatBubbleCell: UITableViewCell {
     
     private func setupBubbleStyle() {
         if isUserMessage {
-            // 用户消息样式 - 使用新的蓝色背景
+            // 用户消息样式
             bubbleView.backgroundColor = UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0)
-            
-            // 确保文字颜色对比度高
             messageLabel.textColor = .white
             
-            // 用户头像 - 使用自定义图片
+            // 用户头像设置
             avatarImageView.image = UIImage(named: "UserAvatar")
-            
-            // 确保头像是圆形 - 在layoutSubviews中设置圆角
-            avatarImageView.layer.cornerRadius = 18 // 直径的一半
+            avatarImageView.layer.cornerRadius = 18
             avatarImageView.clipsToBounds = true
-            
-            // 添加边框使圆形更明显（可选）
             avatarImageView.layer.borderWidth = 1.0
             avatarImageView.layer.borderColor = UIColor.white.cgColor
             
-            // 约束调整
+            // 用户消息靠右，头像在最右侧
             NSLayoutConstraint.deactivate(bubbleView.constraints.filter { 
                 $0.firstAttribute == .leading || $0.firstAttribute == .trailing 
             })
             NSLayoutConstraint.activate([
-                bubbleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-                avatarImageView.trailingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: -8),
-                avatarImageView.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 16)
+                // 头像靠右
+                avatarImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+                // 气泡在头像左侧
+                bubbleView.trailingAnchor.constraint(equalTo: avatarImageView.leadingAnchor, constant: -8),
+                bubbleView.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 60)
             ])
-        } else {
-            // AI消息样式 - 左侧浅色气泡
-            bubbleView.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.95, alpha: 1.0)
             
-            // AI消息文字颜色
+        } else {
+            // AI消息样式
+            bubbleView.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.95, alpha: 1.0)
             messageLabel.textColor = .black
             
-            // AI头像
+            // AI头像设置
             avatarImageView.image = UIImage(systemName: "brain.head.profile")
-            avatarImageView.tintColor = UIColor(red: 0.4, green: 0.7, blue: 0.9, alpha: 1.0) // 浅蓝色图标
-            
-            // 确保AI头像也是圆形
+            avatarImageView.tintColor = UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0)
             avatarImageView.layer.cornerRadius = 18
             avatarImageView.clipsToBounds = true
+            avatarImageView.backgroundColor = UIColor(red: 0.95, green: 0.98, blue: 1.0, alpha: 1.0)
             
-            // 添加背景色使圆形更明显（可选）
-            avatarImageView.backgroundColor = UIColor(red: 0.95, green: 0.98, blue: 1.0, alpha: 1.0) // 非常浅的蓝色背景
-            
-            // 约束调整
+            // AI消息靠左，头像在最左侧
             NSLayoutConstraint.deactivate(bubbleView.constraints.filter { 
                 $0.firstAttribute == .leading || $0.firstAttribute == .trailing 
             })
             NSLayoutConstraint.activate([
-                bubbleView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-                avatarImageView.leadingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: 8),
-                avatarImageView.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -16)
+                // 头像靠左
+                avatarImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+                // 气泡在头像右侧
+                bubbleView.leadingAnchor.constraint(equalTo: avatarImageView.trailingAnchor, constant: 8),
+                bubbleView.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -60)
             ])
         }
         
