@@ -508,6 +508,9 @@ class ChatBubbleCell: UITableViewCell {
     private var isThinkingCell = false
     var onExpandTapped: (() -> Void)?
     
+    // 存储约束以便后续移除
+    private var customConstraints: [NSLayoutConstraint] = []
+    
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         setupViews()
@@ -573,6 +576,10 @@ class ChatBubbleCell: UITableViewCell {
     }
     
     private func setupBubbleStyle() {
+        // 移除之前的约束
+        NSLayoutConstraint.deactivate(customConstraints)
+        customConstraints.removeAll()
+        
         if isUserMessage {
             // 用户消息样式
             bubbleView.backgroundColor = UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0)
@@ -586,16 +593,14 @@ class ChatBubbleCell: UITableViewCell {
             avatarImageView.layer.borderColor = UIColor.white.cgColor
             
             // 用户消息靠右，头像在最右侧
-            NSLayoutConstraint.deactivate(bubbleView.constraints.filter { 
-                $0.firstAttribute == .leading || $0.firstAttribute == .trailing 
-            })
-            NSLayoutConstraint.activate([
-                // 头像靠右
+            let newConstraints = [
                 avatarImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-                // 气泡在头像左侧
                 bubbleView.trailingAnchor.constraint(equalTo: avatarImageView.leadingAnchor, constant: -8),
                 bubbleView.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 60)
-            ])
+            ]
+            
+            NSLayoutConstraint.activate(newConstraints)
+            customConstraints.append(contentsOf: newConstraints)
             
         } else {
             // AI消息样式
@@ -610,16 +615,14 @@ class ChatBubbleCell: UITableViewCell {
             avatarImageView.backgroundColor = UIColor(red: 0.95, green: 0.98, blue: 1.0, alpha: 1.0)
             
             // AI消息靠左，头像在最左侧
-            NSLayoutConstraint.deactivate(bubbleView.constraints.filter { 
-                $0.firstAttribute == .leading || $0.firstAttribute == .trailing 
-            })
-            NSLayoutConstraint.activate([
-                // 头像靠左
+            let newConstraints = [
                 avatarImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-                // 气泡在头像右侧
                 bubbleView.leadingAnchor.constraint(equalTo: avatarImageView.trailingAnchor, constant: 8),
                 bubbleView.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -60)
-            ])
+            ]
+            
+            NSLayoutConstraint.activate(newConstraints)
+            customConstraints.append(contentsOf: newConstraints)
         }
         
         // 强制更新布局
@@ -683,6 +686,10 @@ class ChatBubbleCell: UITableViewCell {
         messageLabel.text = ""
         
         // 移除所有自定义约束
+        NSLayoutConstraint.deactivate(customConstraints)
+        customConstraints.removeAll()
+        
+        // 移除气泡视图的高度约束
         bubbleView.constraints.forEach { constraint in
             if constraint.firstAttribute == .height {
                 bubbleView.removeConstraint(constraint)
