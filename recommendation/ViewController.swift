@@ -58,7 +58,7 @@ class ViewController: UIViewController {
         view.backgroundColor = .white
         
         // 顶部背景视图
-        topBackgroundView.backgroundColor = UIColor(red: 0.4, green: 0.7, blue: 0.9, alpha: 1.0) // 浅蓝色背景
+        topBackgroundView.backgroundColor = UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0)
         topBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(topBackgroundView)
     }
@@ -67,7 +67,7 @@ class ViewController: UIViewController {
         view.backgroundColor = .systemBackground
         
         // 添加顶部背景视图 - 不需要重新创建，使用类属性
-        topBackgroundView.backgroundColor = UIColor(red: 0.4, green: 0.7, blue: 0.9, alpha: 1.0) // 浅蓝色背景
+        topBackgroundView.backgroundColor = UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0)
         topBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(topBackgroundView)
         
@@ -116,7 +116,7 @@ class ViewController: UIViewController {
         let micConfig = UIImage.SymbolConfiguration(pointSize: 30, weight: .medium)
         voiceButton.setImage(UIImage(systemName: "mic.fill", withConfiguration: micConfig), for: .normal)
         voiceButton.tintColor = .white // 白色图标
-        voiceButton.backgroundColor = UIColor(red: 0.4, green: 0.7, blue: 0.9, alpha: 1.0) // 浅蓝色背景
+        voiceButton.backgroundColor = UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0)
         voiceButton.layer.cornerRadius = 35 // 增大圆角
         voiceButton.layer.shadowColor = UIColor.black.cgColor
         voiceButton.layer.shadowOffset = CGSize(width: 0, height: 2)
@@ -574,8 +574,8 @@ class ChatBubbleCell: UITableViewCell {
     
     private func setupBubbleStyle() {
         if isUserMessage {
-            // 用户消息样式 - 使用浅蓝色背景
-            bubbleView.backgroundColor = UIColor(red: 0.4, green: 0.7, blue: 0.9, alpha: 1.0) // 浅蓝色背景
+            // 用户消息样式 - 使用新的蓝色背景
+            bubbleView.backgroundColor = UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0)
             
             // 确保文字颜色对比度高
             messageLabel.textColor = .white
@@ -679,7 +679,7 @@ class ChatBubbleCell: UITableViewCell {
         } else {
             messageLabel.isHidden = false
             bubbleView.backgroundColor = isUserMessage ? 
-                UIColor(red: 0.4, green: 0.7, blue: 0.9, alpha: 1.0) : 
+                UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0) : 
                 UIColor(red: 0.95, green: 0.95, blue: 0.95, alpha: 1.0)
             messageLabel.font = UIFont.systemFont(ofSize: 16)
         }
